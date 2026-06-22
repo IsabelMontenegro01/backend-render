@@ -5,3 +5,4 @@ pydantic>=2.0.0
 # 2.8.x avoids storage3>=2.x → pyiceberg (no wheel + MSVC on Windows Python 3.14)
 supabase==2.8.1
 python-dotenv>=1.0.0
+httpx>=0.27.0
