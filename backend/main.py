@@ -8,7 +8,7 @@ load_dotenv(_backend_dir.parent / ".env")
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from app.routers import drones, voos, telemetria, deteccoes, consultas_pier, alertas, dashboard
+from app.routers import drones, voos, telemetria, deteccoes, consultas_pier, alertas, dashboard, rotas
 
 
 app = FastAPI(
@@ -41,6 +41,7 @@ app.include_router(deteccoes.router,      prefix="/deteccoes",       tags=["Dete
 app.include_router(consultas_pier.router, prefix="/consultas-pier",  tags=["Consultas Pier"])
 app.include_router(alertas.router,        prefix="/alertas",         tags=["Alertas"])
 app.include_router(dashboard.router,      prefix="/dashboard",       tags=["Dashboard"])
+app.include_router(rotas.router,          prefix="/rotas",           tags=["Rotas"])
 
 
 @app.get("/health", tags=["Health"])
