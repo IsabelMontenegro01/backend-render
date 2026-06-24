@@ -17,7 +17,7 @@ try:
 except Exception:
     pass
 
-BASE = sys.argv[1].rstrip("/") if len(sys.argv) > 1 else "https://backend-render-l4u0.onrender.com/health"
+BASE = sys.argv[1].rstrip("/") if len(sys.argv) > 1 else "https://backend-render-l4u0.onrender.com"
 ROUTE = "square"
 
 # Contadores
