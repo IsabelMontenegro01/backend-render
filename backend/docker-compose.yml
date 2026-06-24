@@ -6,6 +6,8 @@ services:
     container_name: drone_backend_app
     ports:
       - "8000:8000"
+    env_file:
+      - .env            # <-- ADICIONA ISTO AQUI
 
   testes:
     build: .
@@ -13,3 +15,5 @@ services:
     command: python -m pytest tests/ -v
     depends_on:
       - backend
+    env_file:
+      - .env            # <-- ADICIONA ISTO AQUI TAMBÉM
