@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  backend:
+    build: .
+    container_name: drone_backend_app
+    ports:
+      - "8000:8000"
+
+  testes:
+    build: .
+    container_name: drone_backend_tests
+    command: python -m pytest tests/ -v
+    depends_on:
+      - backend
