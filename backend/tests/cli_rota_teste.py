@@ -15,7 +15,7 @@ import time
 import httpx
 
 ROUTE = sys.argv[1] if len(sys.argv) > 1 else "square"
-BASE  = (sys.argv[2] if len(sys.argv) > 2 else "http://127.0.0.1:8000").rstrip("/")
+BASE  = (sys.argv[2] if len(sys.argv) > 2 else "https://backend-render-l4u0.onrender.com").rstrip("/")
 
 
 def estado_atual(c):
