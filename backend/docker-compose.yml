@@ -1,19 +1,49 @@
-version: '3.8'
+# docker-compose.yml — ambiente padronizado de desenvolvimento e CI
+# Uso:
+#   cp .env.example .env        # preenche SUPABASE_URL e SUPABASE_SERVICE_KEY
+#   docker compose up --build   # sobe o backend
+#   docker compose run --rm tests  # roda a suite pytest isolada
 
 services:
+
+  # ── Backend principal ───────────────────────────────────────────────────────
   backend:
-    build: .
-    container_name: drone_backend_app
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: pier_backend
+    restart: unless-stopped
     ports:
       - "8000:8000"
     env_file:
-      - .env            # <-- ADICIONA ISTO AQUI
+      - .env                    # SUPABASE_URL, SUPABASE_SERVICE_KEY, PIER_*
+    environment:
+      # Sobrescreve apenas o que for específico de dev
+      PYTHONUNBUFFERED: "1"
+      PYTHONPATH: "/app"
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
 
-  testes:
-    build: .
-    container_name: drone_backend_tests
-    command: python -m pytest tests/ -v
-    depends_on:
-      - backend
+  # ── Suite de testes (roda e sai) ────────────────────────────────────────────
+  tests:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: pier_tests
+    # Sobrescreve o CMD de produção para rodar pytest (já instalado na imagem)
+    command: pytest tests/ -v --tb=short
     env_file:
-      - .env            # <-- ADICIONA ISTO AQUI TAMBÉM
+      - .env
+    environment:
+      PYTHONUNBUFFERED: "1"
+      # Valores dummy para testes (o mock substitui o cliente real)
+      SUPABASE_URL: "https://fake.supabase.co"
+      SUPABASE_SERVICE_KEY: "fake-key"
+      PYTHONPATH: "/app"
+    profiles:
+      - test                    # não sobe com `docker compose up`, só com --profile test

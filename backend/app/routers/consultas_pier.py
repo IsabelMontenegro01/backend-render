@@ -1,127 +1,89 @@
-import sys
-import os
-import pytest
-from fastapi.testclient import TestClient
+from typing import Dict, Optional
+from fastapi import APIRouter, HTTPException, Depends, Query
+from pydantic import BaseModel
+from supabase import Client
+from app.database.supabase_client import get_client
+from app.repositories.consulta_pier_repository import ConsultaPierRepository
 
-# 1. Ajusta o path para garantir que o Python localize os módulos corretamente
-sys.path.insert(0, os.path.abspath(os.path.dirname(os.path.dirname(__file__))))
+router = APIRouter(redirect_slashes=False)
 
-# 2. Solução para a Importação Circular: 
-# Forçamos a inicialização completa dos submódulos do pacote antes de puxar o 'app'.
-# Isso quebra o ciclo de dependência na memória do Python exclusivamente durante o teste.
-import app.routers.__init__
+STATUS_MAP = {"found": "achado", "not_found": "nao_achado"}
 
-from main import app 
 
-client = TestClient(app)
+class VeiculoDados(BaseModel):
+    make: Optional[str] = None
+    model: Optional[str] = None
+    fabrication_year: Optional[int] = None
 
-@pytest.fixture(scope="module")
-def dados_fluxo():
-    """Compartilha os IDs criados dinamicamente ao longo do fluxo de testes."""
-    return {
-        "id_drone": None,
-        "id_voo": None,
-        "id_deteccao": None,
-        "id_consulta": None
-    }
 
-def test_health_check():
-    response = client.get("/drones/")
-    assert response.status_code == 200
+class RespostaPierUnica(BaseModel):
+    vehicle_lookup_id: Optional[str] = None
+    vehicle: Optional[VeiculoDados] = None
+    status: str
 
-def test_dashboard_resumo():
-    response = client.get("/dashboard/resumo")
-    assert response.status_code == 200
 
-def test_cadastrar_drone(dados_fluxo):
-    payload = {
-        "numero_serie": "DRN-2026-TESTE-LIVIA",
-        "nome": "Drone de Patrulha Pier",
-        "modelo": "DJI Tello"
-    }
-    response = client.post("/drones/", json=payload)
-    assert response.status_code in (200, 201)
-    
-    dados = response.json()
-    dados_fluxo["id_drone"] = dados.get("id") or dados.get("id_drone")
+class ConsultaCreate(BaseModel):
+    deteccao_id: int
+    placa_consultada: str
+    resultado: str
+    resposta_raw: dict
 
-def test_iniciar_voo_drone(dados_fluxo):
-    id_drone = dados_fluxo.get("id_drone") or 1
-    payload = {
-        "id_drone": id_drone,
-        "area_monitorada": "Pier Setor Sul"
-    }
-    response = client.post("/voos/", json=payload)
-    assert response.status_code in (200, 201)
-    
-    dados = response.json()
-    dados_fluxo["id_voo"] = dados.get("id") or dados.get("id_voo")
 
-def test_enviar_telemetria_batch(dados_fluxo):
-    id_voo = dados_fluxo.get("id_voo") or 1
-    payload = {
-        "id_voo": id_voo,
-        "leituras": [
-            {
-                "latitude": -23.5500000,
-                "longitude": -46.6300000,
-                "altura": 15,
-                "velocidade_x": 5.0,
-                "velocidade_y": 0.0,
-                "velocidade_z": 0.0,
-                "bateria": 85
-            }
-        ]
-    }
-    response = client.post("/telemetria/batch", json=payload)
-    assert response.status_code in (200, 201)
+def get_repo(client: Client = Depends(get_client)) -> ConsultaPierRepository:
+    return ConsultaPierRepository(client)
 
-def test_criar_deteccao_e_consulta_pier(dados_fluxo):
-    id_voo = dados_fluxo.get("id_voo") or 1
-    
-    payload_deteccao = {
-        "id_voo": id_voo,
-        "dados": {
-            "placa_lida": "ABC1D23",
-            "confianca_ocr": 0.98,
-            "marca_veiculo": "Toyota",
-            "modelo_veiculo": "Corolla"
-        }
-    }
-    resp_det = client.post("/deteccoes/", json=payload_deteccao)
-    assert resp_det.status_code in (200, 201)
-    
-    id_det = resp_det.json().get("id") if isinstance(resp_det.json(), dict) else None
 
-    payload_pier = {
-        "ABC1D23": {
-            "status": "found",
-            "vehicle_lookup_id": "pier-lkp-123",
-            "vehicle": {
-                "make": "Toyota",
-                "model": "Corolla",
-                "fabrication_year": 2024
-            }
-        }
-    }
-    
-    url_consulta = "/consultas_pier/batch"
-    if id_det:
-        url_consulta += f"?id_deteccao={id_det}"
-        
-    resp_cons = client.post(url_consulta, json=payload_pier)
-    assert resp_cons.status_code in (200, 201)
-    
-    lista_consultas = resp_cons.json()
-    if lista_consultas and isinstance(lista_consultas, list):
-        dados_fluxo["id_consulta"] = lista_consultas[0].get("id")
+@router.post("/", status_code=201)
+def registrar_consulta(body: ConsultaCreate, repo: ConsultaPierRepository = Depends(get_repo)):
+    return repo.registrar(
+        body.deteccao_id,
+        body.placa_consultada,
+        body.resultado,
+        body.resposta_raw,
+    )
 
-def test_criar_alerta_veiculo(dados_fluxo):
-    id_consulta = dados_fluxo.get("id_consulta") or 1
-    
-    payload = {
-        "consulta_id": id_consulta,
-        "operador_notificado": "Operador Central Centro-Oeste"
-    }
-    response = client.post("/alertas/", json=payload)
-    assert response.status_code in (200, 201)
+
+@router.post("/batch", status_code=201)
+def salvar_consultas_pier_batch(
+    payload: Dict[str, RespostaPierUnica],
+    id_deteccao: Optional[int] = Query(None),
+    repo: ConsultaPierRepository = Depends(get_repo),
+):
+    """
+    Recebe o mock da Pier no formato {placa: {status, vehicle, ...}} e
+    persiste uma linha por placa, convertendo status → resultado.
+    `id_deteccao` é opcional: vincula todas as consultas à mesma detecção.
+    """
+    if not payload:
+        return []
+
+    salvos = []
+    for placa, dados in payload.items():
+        resultado = STATUS_MAP.get(dados.status, "nao_achado")
+        resposta_raw = dados.model_dump()
+        registro = repo.registrar(
+            deteccao_id=id_deteccao,
+            placa_consultada=placa,
+            resultado=resultado,
+            resposta_raw=resposta_raw,
+        )
+        salvos.append(registro)
+    return salvos
+
+
+@router.get("/achados")
+def listar_achados(repo: ConsultaPierRepository = Depends(get_repo)):
+    return repo.listar_achados()
+
+
+@router.get("/{consulta_id}")
+def buscar_consulta(consulta_id: int, repo: ConsultaPierRepository = Depends(get_repo)):
+    consulta = repo.buscar_por_id(consulta_id)
+    if consulta is None:
+        raise HTTPException(status_code=404, detail="Consulta não encontrada")
+    return consulta
+
+
+@router.get("/deteccao/{deteccao_id}")
+def listar_por_deteccao(deteccao_id: int, repo: ConsultaPierRepository = Depends(get_repo)):
+    return repo.listar_por_deteccao(deteccao_id)
