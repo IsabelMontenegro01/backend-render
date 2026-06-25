@@ -1,5 +1,6 @@
 from pathlib import Path
 from dotenv import load_dotenv
+from app.routers import drones, voos, telemetria, deteccoes, consultas_pier, alertas, dashboard, rotas, stream
 
 _backend_dir = Path(__file__).resolve().parent
 load_dotenv(_backend_dir / ".env")
@@ -42,6 +43,7 @@ app.include_router(consultas_pier.router, prefix="/consultas-pier",  tags=["Cons
 app.include_router(alertas.router,        prefix="/alertas",         tags=["Alertas"])
 app.include_router(dashboard.router,      prefix="/dashboard",       tags=["Dashboard"])
 app.include_router(rotas.router,          prefix="/rotas",           tags=["Rotas"])
+app.include_router(stream.router, prefix="/stream", tags=["Stream"])
 
 
 @app.get("/health", tags=["Health"])

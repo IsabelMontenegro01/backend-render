@@ -1,6 +1,6 @@
 """
 cli_rota_teste.py — simula o frontend para testar rotas pela linha de comando.
-Dispara preparar → aguarda pronta → inicia, e o tello_detector (já rodando) executa.
+Dispara preparar -> aguarda pronta -> inicia, e o tello_detector (já rodando) executa.
 
 NÃO conecta no drone. Só fala com o backend. Pode rodar em outro terminal,
 com o tello_detector.py ligado em paralelo.
@@ -14,6 +14,11 @@ import sys
 import time
 import httpx
 
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+except Exception:
+    pass
+
 ROUTE = sys.argv[1] if len(sys.argv) > 1 else "square"
 BASE  = (sys.argv[2] if len(sys.argv) > 2 else "https://backend-render-l4u0.onrender.com").rstrip("/")
 
@@ -26,7 +31,7 @@ def estado_atual(c):
 
 
 def main():
-    print(f"\n=== Teste de rota '{ROUTE}'  →  {BASE} ===\n")
+    print(f"\n=== Teste de rota '{ROUTE}'  ->  {BASE} ===\n")
 
     with httpx.Client(base_url=BASE, timeout=15) as c:
         # checa backend
