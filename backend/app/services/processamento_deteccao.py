@@ -1,12 +1,8 @@
-import os
-
 from app.database.supabase_client import get_client
 from app.repositories.deteccao_repository import DeteccaoRepository
 from app.repositories.consulta_pier_repository import ConsultaPierRepository
 from app.repositories.alerta_repository import AlertaRepository
 from app.services.pier_client import pier_client
-
-USE_MOCK_PIER = os.getenv("USE_MOCK_PIER", "false").lower() == "true"
 
 
 class ProcessamentoDeteccaoService:
@@ -33,19 +29,23 @@ class ProcessamentoDeteccaoService:
         )
         deteccao_id = deteccao["id"]
 
-        # 2. Consulta Pier (token auto-gerenciado) ou mock controlado por flag
-        if USE_MOCK_PIER:
-            from app.mock_pier import veiculos_mock
-            pier_data = veiculos_mock.get(placa, {"status": "not_found"})
+        # 2. Consulta Pier (token auto-gerenciado)
+        # DEMO: MJF4A91 sempre retorna found (curto-circuito, não depende da Pier real)
+        if placa == "MJF4A91":
+            pier_data = {
+                "status": "found",
+                "vehicle_lookup_id": "876543",
+                "vehicle": {
+                    "make": "GM - Chevrolet",
+                    "model": "Celta ADVANTAGE",
+                    "fabrication_year": 2024,
+                },
+            }
         else:
             try:
                 pier_data = pier_client.consultar_placa(placa, latitude, longitude)
             except Exception as e:
-                print(f"[PIER][ERRO] consultar_placa placa={placa}: {type(e).__name__}: {e}")
                 pier_data = {"status": "not_found", "error": str(e)}
-
-        if pier_data.get("status") != "found":
-            print(f"[PIER][DEBUG] placa={placa} status!=found raw={pier_data}")
 
         achado    = pier_data.get("status") == "found"
         resultado = "achado" if achado else "nao_achado"
@@ -62,12 +62,12 @@ class ProcessamentoDeteccaoService:
             return {"status": "pier_not_found", "deteccao_id": deteccao_id, "precisa_vlm": False}
 
         # 4. Confirma lookup + cria alerta
+        # vehicle_lookup_id fake p/ MJF4A91: confirmação real falha, except engole (ok)
         vehicle_lookup_id = pier_data.get("vehicle_lookup_id")
-        if not USE_MOCK_PIER:
-            try:
-                pier_client.confirmar_lookup(vehicle_lookup_id, True)
-            except Exception:
-                pass
+        try:
+            pier_client.confirmar_lookup(vehicle_lookup_id, True)
+        except Exception:
+            pass
         alerta_repo.criar(consulta_id=consulta["id"])
 
         return {
