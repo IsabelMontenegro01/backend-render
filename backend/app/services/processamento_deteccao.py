@@ -1,8 +1,12 @@
+import os
+
 from app.database.supabase_client import get_client
 from app.repositories.deteccao_repository import DeteccaoRepository
 from app.repositories.consulta_pier_repository import ConsultaPierRepository
 from app.repositories.alerta_repository import AlertaRepository
 from app.services.pier_client import pier_client
+
+USE_MOCK_PIER = os.getenv("USE_MOCK_PIER", "false").lower() == "true"
 
 
 class ProcessamentoDeteccaoService:
@@ -29,11 +33,19 @@ class ProcessamentoDeteccaoService:
         )
         deteccao_id = deteccao["id"]
 
-        # 2. Consulta Pier (token auto-gerenciado)
-        try:
-            pier_data = pier_client.consultar_placa(placa, latitude, longitude)
-        except Exception as e:
-            pier_data = {"status": "not_found", "error": str(e)}
+        # 2. Consulta Pier (token auto-gerenciado) ou mock controlado por flag
+        if USE_MOCK_PIER:
+            from app.mock_pier import veiculos_mock
+            pier_data = veiculos_mock.get(placa, {"status": "not_found"})
+        else:
+            try:
+                pier_data = pier_client.consultar_placa(placa, latitude, longitude)
+            except Exception as e:
+                print(f"[PIER][ERRO] consultar_placa placa={placa}: {type(e).__name__}: {e}")
+                pier_data = {"status": "not_found", "error": str(e)}
+
+        if pier_data.get("status") != "found":
+            print(f"[PIER][DEBUG] placa={placa} status!=found raw={pier_data}")
 
         achado    = pier_data.get("status") == "found"
         resultado = "achado" if achado else "nao_achado"
@@ -51,10 +63,11 @@ class ProcessamentoDeteccaoService:
 
         # 4. Confirma lookup + cria alerta
         vehicle_lookup_id = pier_data.get("vehicle_lookup_id")
-        try:
-            pier_client.confirmar_lookup(vehicle_lookup_id, True)
-        except Exception:
-            pass
+        if not USE_MOCK_PIER:
+            try:
+                pier_client.confirmar_lookup(vehicle_lookup_id, True)
+            except Exception:
+                pass
         alerta_repo.criar(consulta_id=consulta["id"])
 
         return {
